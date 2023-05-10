@@ -317,7 +317,7 @@ def convert_derived2rle(derived_file_name):
             if(pos[0] == 4) or (pos[0] == 5):
                 value = pos[2] & 0xFFFF
             else:
-                value = (pos[2] & 0xFF) << 8 | (pos[3] & 0xFF)
+                value = (pos[3] & 0xFF) << 8 | (pos[2] & 0xFF)
 
             #f.write(struct.pack(">HH", pos_and_time, value))
             final[section].extend(struct.pack(">HH", pos_and_time, value))

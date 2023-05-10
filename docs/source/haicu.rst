@@ -20,6 +20,14 @@ haicu.ftdi module
    :undoc-members:
    :show-inheritance:
 
+haicu.haicu\_ctl module
+-----------------------
+
+.. automodule:: haicu.haicu_ctl
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

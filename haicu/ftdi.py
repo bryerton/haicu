@@ -1,5 +1,6 @@
 from pyftdi.ftdi import Ftdi
 from datetime import datetime
+from typing import Union
 import struct
 
 CMD_READ_STATUS = 1
@@ -17,7 +18,7 @@ FPGA_FIFO_SIZE = 8192
 MAX_NUM_TRIES = 3
 
 # Used internally to 'fix' bug in PyFTDI where sometimes after a command we get a NULL read response
-def __read_clear(ftdi_dev):
+def __read_clear(ftdi_dev: object) -> None:
     num_tries = 0
     while(num_tries < MAX_NUM_TRIES):
         try:
@@ -28,12 +29,11 @@ def __read_clear(ftdi_dev):
             num_tries = num_tries + 1
 
 
-def init(dev_name: str, latency: int =-1):
+def init(dev_name: str) -> object:
     """Initialize FTDI device and returns a handle to it
 
     Args:
         dev_name (str): Name of FTDI device, typically the serial number
-        latency (int): Latency to use for FTDI driver, too low can cause issues. Use -1 to use driver default
 
     Returns:
         FTDI Device object
@@ -47,8 +47,7 @@ def init(dev_name: str, latency: int =-1):
     ftdi_dev.set_bitmode(0, Ftdi.BitMode.SYNCFF)
     # Lowering the latency timer greatly speeds up the read requests,
     # But at lower values the USB is more prone to errors
-    if(latency > -1):
-        ftdi_dev.set_latency_timer(latency)
+    # ftdi_dev.set_latency_timer(2)
 
     # Two calls (of any type) are necessary on startup
     # In theory, if we could know ahead of time if we've
@@ -67,7 +66,7 @@ def init(dev_name: str, latency: int =-1):
     return ftdi_dev
 
 
-def list_devices():
+def list_devices() -> list:
     """Get a list of available MLD1200 devices connected to host
 
     Args: None
@@ -92,7 +91,7 @@ def list_devices():
 
     return ret
 
-def read_status(ftdi_dev, address):
+def read_status(ftdi_dev: object, address: int) -> int:
     """Low-level function to read from status register
 
     Args:
@@ -117,15 +116,14 @@ def read_status(ftdi_dev, address):
             if(len(response) == 4):
                 val, = struct.unpack("<I", response)
                 break
-            else:
-                raise ValueError
 
+            num_tries = num_tries + 1
         except:
             num_tries = num_tries + 1
 
     return val
 
-def read_register(ftdi_dev, address):
+def read_register(ftdi_dev: object, address: int) -> int:
     """Low-level function to read from control register
 
     Args:
@@ -134,9 +132,6 @@ def read_register(ftdi_dev, address):
 
     Returns:
         Value contained in control register at given address
-
-    Raises:
-        ValueError: If response is invalid
 
     """
 
@@ -154,15 +149,14 @@ def read_register(ftdi_dev, address):
             if(len(response) == 4):
                 val, = struct.unpack("<I", response)
                 break
-            else:
-                raise ValueError
 
+            num_tries = num_tries + 1
         except:
             num_tries = num_tries + 1
 
     return val
 
-def write_register(ftdi_dev, address, data):
+def write_register(ftdi_dev: object, address: int, data: int) -> None:
     """Low-level function to write to control register
 
     Args:
@@ -183,7 +177,7 @@ def write_register(ftdi_dev, address, data):
             num_tries = num_tries + 1
 
 
-def read_memory(ftdi_dev, address, num_words):
+def read_memory(ftdi_dev: object, address: int, num_words: int) -> list[int]:
     """Low-level function to read from DDR memory
 
     Args:
@@ -192,11 +186,7 @@ def read_memory(ftdi_dev, address, num_words):
         num_words (int): Number of 32-bit words to read
 
     Returns:
-        List of 32-bit words read from memory, starting from address given
-
-
-    Raises:
-        ValueError: If response is invalid / number of bytes received is invalid
+        List of 32-bit words read from memory, starting from address given. Empty list returned on error
 
     """
 
@@ -219,26 +209,28 @@ def read_memory(ftdi_dev, address, num_words):
         payload = struct.pack("<II", (CMD_READ_MEM << 24) | ((address + offset) & 0xFFFFFF), tsize - 1)
 
         num_tries = 0
-        try:
-            ftdi_dev.write_data(payload)
-            response = ftdi_dev.read_data(num_bytes)
-            if(len(response) == num_bytes):
-                for i in range(0, num_bytes, 4):
-                    val, = struct.unpack_from("<I", response, i)
-                    ret.append(val)
-                break
-            else:
-                raise ValueError
-        except:
-            num_tries = num_tries + 1
+        while(num_tries < MAX_NUM_TRIES):
+            try:
+                ftdi_dev.write_data(payload)
+                response = ftdi_dev.read_data(num_bytes)
+                if(len(response) == num_bytes):
+                    for i in range(0, num_bytes, 4):
+                        val, = struct.unpack_from("<I", response, i)
+                        ret.append(val)
+                    break
+                num_tries = num_tries + 1
+            except:
+                num_tries = num_tries + 1
 
+        if(num_tries == MAX_NUM_TRIES):
+            return []
 
         offset = offset + tsize
         tlen = tlen - tsize
 
     return ret
 
-def write_memory(ftdi_dev, address, data):
+def write_memory(ftdi_dev: object, address: int, data: Union[int, list[int]]) -> None:
     """Low-level function to write to DDR memory
 
     Args:
@@ -270,7 +262,7 @@ def write_memory(ftdi_dev, address, data):
 
         ftdi_dev.write_data(payload)
 
-def gather_status_registers(ftdi_dev):
+def gather_status_registers(ftdi_dev: object) -> dict[Union[int, bool, str, float]]:
     """Gather values from all status registers and place them in a dictionary
 
     Args:
@@ -279,40 +271,43 @@ def gather_status_registers(ftdi_dev):
     """
     resp = {}
 
-    val = read_status(ftdi_dev, 0)
-    resp['program_load'] = bool(val & 0x80000000)
-    resp['program_active'] = bool(val & 0x40000000)
-    resp['program_armed'] = bool(val & 0x20000000)
-    resp['program_ddr_load'] = bool(val & 0x10000000)
-    resp['program_ddr_lock'] = bool(val & 0x08000000)
-    resp['program_done'] = bool(val & 0x040000000)
-    resp['program_error'] = bool(val & 0x02000000)
-    resp['fp_status'] = int(val & 0xFF)
+    try:
+        val = read_status(ftdi_dev, 0)
+        resp['program_load'] = bool(val & 0x80000000)
+        resp['program_active'] = bool(val & 0x40000000)
+        resp['program_armed'] = bool(val & 0x20000000)
+        resp['program_ddr_load'] = bool(val & 0x10000000)
+        resp['program_ddr_lock'] = bool(val & 0x08000000)
+        resp['program_done'] = bool(val & 0x040000000)
+        resp['program_error'] = bool(val & 0x02000000)
+        resp['fp_status'] = int(val & 0xFF)
 
-    val = read_status(ftdi_dev, 5)
-    resp['program_run_count'] = val
-    val = read_status(ftdi_dev, 6)
-    resp['program_error_count'] = val
-    val = read_status(ftdi_dev, 1)
-    resp['trigger_active'] = bool(val & 0x80000000)
-    resp['trigger_counter'] = val & 0x7FFFFFFF
-    val = read_status(ftdi_dev, 3)
-    resp['external_clock_freq'] = val
-    val = read_status(ftdi_dev, 4)
-    resp['external_clock_active'] = bool(val & 0x80000000)
-    resp['external_clock_counter'] = val & 0x7FFFFFFF
-    val = read_status(ftdi_dev, 2)
-    resp['buildtime'] = str(datetime.fromtimestamp(val))
+        val = read_status(ftdi_dev, 5)
+        resp['program_run_count'] = val
+        val = read_status(ftdi_dev, 6)
+        resp['program_error_count'] = val
+        val = read_status(ftdi_dev, 1)
+        resp['trigger_active'] = bool(val & 0x80000000)
+        resp['trigger_counter'] = val & 0x7FFFFFFF
+        val = read_status(ftdi_dev, 3)
+        resp['external_clock_freq'] = val
+        val = read_status(ftdi_dev, 4)
+        resp['external_clock_active'] = bool(val & 0x80000000)
+        resp['external_clock_counter'] = val & 0x7FFFFFFF
+        val = read_status(ftdi_dev, 2)
+        resp['buildtime'] = str(datetime.fromtimestamp(val))
 
-    val = read_status(ftdi_dev, 7)
-    resp['program_run_timer'] = int(val)
+        val = read_status(ftdi_dev, 7)
+        resp['program_run_timer'] = int(val)
 
-    val = read_status(ftdi_dev, 8)
-    resp['uptime'] = int(val)
+        val = read_status(ftdi_dev, 8)
+        resp['uptime'] = int(val)
+    except:
+        return {}
 
     return resp
 
-def gather_control_registers(ftdi_dev):
+def gather_control_registers(ftdi_dev: object) -> dict[Union[int, bool, str, float]]:
     """Gather values from all control registers and place them in a dictionary
 
     Args:
@@ -321,54 +316,56 @@ def gather_control_registers(ftdi_dev):
     """
 
     resp = {}
+    try:
+        val = read_register(ftdi_dev, 0)
+        resp['program_load'] = bool(val & 0x00000001)
 
-    val = read_register(ftdi_dev, 0)
-    resp['program_load'] = bool(val & 0x00000001)
+        val = read_register(ftdi_dev, 1)
+        resp['program_numwords'] = val
 
-    val = read_register(ftdi_dev, 1)
-    resp['program_numwords'] = val
+        val = read_register(ftdi_dev, 2)
+        resp['trigger_invert'] = bool(val & 0x40000000)
+        resp['trigger_delay'] = int(val & 0x000000FF)
 
-    val = read_register(ftdi_dev, 2)
-    resp['trigger_invert'] = bool(val & 0x40000000)
-    resp['trigger_delay'] = int(val & 0x000000FF)
+        val = read_register(ftdi_dev, 3)
+        resp['enable_tunebox1'] = (val & 0x000000FF)
+        resp['enable_tunebox2'] = (val & 0x0000FF00) >> 8
+        resp['enable_tunebox3'] = (val & 0x00FF0000) >> 16
+        resp['enable_tunebox4'] = (val & 0xFF000000) >> 24
 
-    val = read_register(ftdi_dev, 3)
-    resp['enable_tunebox1'] = (val & 0x000000FF)
-    resp['enable_tunebox2'] = (val & 0x0000FF00) >> 8
-    resp['enable_tunebox3'] = (val & 0x00FF0000) >> 16
-    resp['enable_tunebox4'] = (val & 0xFF000000) >> 24
+        val = read_register(ftdi_dev, 4)
+        resp['enable_tunebox5'] = (val & 0x000000FF)
+        resp['enable_tunebox6'] = (val & 0x0000FF00) >> 8
+        resp['enable_tunebox7'] = (val & 0x00FF0000) >> 16
+        resp['enable_tunebox8'] = (val & 0xFF000000) >> 24
 
-    val = read_register(ftdi_dev, 4)
-    resp['enable_tunebox5'] = (val & 0x000000FF)
-    resp['enable_tunebox6'] = (val & 0x0000FF00) >> 8
-    resp['enable_tunebox7'] = (val & 0x00FF0000) >> 16
-    resp['enable_tunebox8'] = (val & 0xFF000000) >> 24
+        val = read_register(ftdi_dev, 5)
+        resp['enable_left_address']  = (val & 0x00000FFF)
+        resp['enable_right_address'] = (val & 0x0FFF0000) >> 16
+        resp['enable_frontpanel'] = ((val & 0xF0000000) >> 24) | ((val & 0x0000F000) >> 12)
 
-    val = read_register(ftdi_dev, 5)
-    resp['enable_left_address']  = (val & 0x00000FFF)
-    resp['enable_right_address'] = (val & 0x0FFF0000) >> 16
-    resp['enable_frontpanel'] = ((val & 0xF0000000) >> 24) | ((val & 0x0000F000) >> 12)
+        val = read_register(ftdi_dev, 6)
+        resp['invert_tunebox1'] = (val & 0x000000FF)
+        resp['invert_tunebox2'] = (val & 0x0000FF00) >> 8
+        resp['invert_tunebox3'] = (val & 0x00FF0000) >> 16
+        resp['invert_tunebox4'] = (val & 0xFF000000) >> 24
 
-    val = read_register(ftdi_dev, 6)
-    resp['invert_tunebox1'] = (val & 0x000000FF)
-    resp['invert_tunebox2'] = (val & 0x0000FF00) >> 8
-    resp['invert_tunebox3'] = (val & 0x00FF0000) >> 16
-    resp['invert_tunebox4'] = (val & 0xFF000000) >> 24
+        val = read_register(ftdi_dev, 7)
+        resp['invert_tunebox5'] = (val & 0x000000FF)
+        resp['invert_tunebox6'] = (val & 0x0000FF00) >> 8
+        resp['invert_tunebox7'] = (val & 0x00FF0000) >> 16
+        resp['invert_tunebox8'] = (val & 0xFF000000) >> 24
 
-    val = read_register(ftdi_dev, 7)
-    resp['invert_tunebox5'] = (val & 0x000000FF)
-    resp['invert_tunebox6'] = (val & 0x0000FF00) >> 8
-    resp['invert_tunebox7'] = (val & 0x00FF0000) >> 16
-    resp['invert_tunebox8'] = (val & 0xFF000000) >> 24
-
-    val = read_register(ftdi_dev, 8)
-    resp['invert_left_address']  = (val & 0x00000FFF)
-    resp['invert_right_address'] = (val & 0x0FFF0000) >> 16
-    resp['invert_frontpanel'] = ((val & 0xF0000000) >> 24) | ((val & 0x0000F000) >> 12)
+        val = read_register(ftdi_dev, 8)
+        resp['invert_left_address']  = (val & 0x00000FFF)
+        resp['invert_right_address'] = (val & 0x0FFF0000) >> 16
+        resp['invert_frontpanel'] = ((val & 0xF0000000) >> 24) | ((val & 0x0000F000) >> 12)
+    except:
+        return {}
 
     return resp
 
-def write_control_registers(ftdi_dev, values):
+def write_control_registers(ftdi_dev: object, values: dict[str, int]) -> None:
     """Write an dictionary of values to control registers
 
     Example: write_control_registers(dev, {'trigger_invert': 1, 'trigger_delay': 3})

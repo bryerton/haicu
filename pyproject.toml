@@ -1,16 +1,21 @@
 [project]
 name = "haicu"
-description = "package for HAICU"
-version = "0.9.0"
+description = "package for HAICU experiment"
+dynamic = ["version"]
+
 authors = [
     { name = "Bryerton Shaw", email = "bryerton@triumf.ca" }
 ]
+
 maintainers = [
     { name = "Bryerton Shaw", email = "bryerton@triumf.ca" }
 ]
+
 readme.file = "README.md"
 readme.content-type = "text/markdown"
+
 license.file = "LICENSE"
+
 dependencies = [
     "simplejson",
     "pyftdi"
@@ -22,14 +27,18 @@ dev = [
 ]
 
 [project.scripts]
-haicu-ctl = "haicu.__main__:main"
+haicu-ctl = "haicu.haicu_ctl:main"
 
 [tool.setuptools]
 packages = ["haicu"]
 
+[tool.setuptools.dynamic]
+version = {attr = "haicu.__version__"}
+
 [build-system]
 requires = [ "setuptools >= 35.0.2", "wheel >= 0.29.0"]
 build-backend = "setuptools.build_meta"
+
 
 [tool.tox]
 legacy_tox_ini = """
