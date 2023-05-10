@@ -1,13 +1,10 @@
 import struct
-import csv
-import pprint
 from simplejson import dumps
-
 
 NUM_RUN_BITS = 13  # 13-bit maximum in run-length encoding 'run' field
 MAX_RUN_ALLOWED_RLE = pow(2, NUM_RUN_BITS)
 
-def convert_derived_absolute2rle(derived_file_name):
+def convert_derived_absolute2rle(derived_file_name: str) -> list[list[bytearray]]:
     """Convert absolute timing derived file to RLE format suitable for upload to device
 
     Args:
@@ -200,7 +197,7 @@ def convert_derived_absolute2rle(derived_file_name):
 
     return final
 
-def convert_derived2rle(derived_file_name):
+def convert_derived2rle(derived_file_name: str) -> list[list[bytearray]]:
     """Convert derived file to RLE format suitable for upload to device
 
     Args:
@@ -341,7 +338,7 @@ def convert_derived2rle(derived_file_name):
 
 
 
-def convert_rle2raw(rle_file_name):
+def convert_rle2raw(rle_file_name: str) -> list[list[int]]:
     """Convert RLE file to raw format. Typical use for allowing comparisons between different formats
 
     Args:
@@ -394,7 +391,7 @@ def convert_rle2raw(rle_file_name):
 
     return final
 
-def convert_derived2raw(derived_file_name):
+def convert_derived2raw(derived_file_name: str) -> list[list[int]]:
     """Convert derived file to raw format. Typical use for allowing comparisons between different formats
 
     Args:
@@ -457,7 +454,7 @@ def convert_derived2raw(derived_file_name):
 
     return final
 
-def load_rle_from_file(rle_file_name):
+def load_rle_from_file(rle_file_name: str) -> list[list[int]]:
     """Load an RLE file from disk into memory. Each section is loaded as an array of 32-bit integer values
 
     Args:
@@ -483,7 +480,7 @@ def load_rle_from_file(rle_file_name):
 
     return final
 
-def match(derived_file, rle_file):
+def match(derived_file: str, rle_file: str) -> bool:
     """Checks if a derived file and and RLE file match output when converted to the same 'raw' format
 
     Args:
@@ -504,6 +501,9 @@ def match(derived_file, rle_file):
     rle_json = dumps(rle_binary)
 
     return True if rle_json == bin_json else False
+
+# import csv
+# import pprint
 
 # def convert_sum_to_obj(sum_file):
 #     sum_obj = {}

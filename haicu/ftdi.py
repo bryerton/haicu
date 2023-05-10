@@ -66,7 +66,7 @@ def init(dev_name: str) -> object:
     return ftdi_dev
 
 
-def list_devices() -> list:
+def list_devices() -> list[str]:
     """Get a list of available MLD1200 devices connected to host
 
     Args: None
