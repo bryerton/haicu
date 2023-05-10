@@ -2,7 +2,7 @@
 
 docs: ## Update python docs
 	@cd docs; sphinx-apidoc -f -o ./source ../haicu
-	@cd docs; make clean html
+	@cd docs; make html
 
 clean: ## Clean python cache files
 	@rm -rf rm -rf build/ dist/ haicu.egg-info/ haicu/__pycache__

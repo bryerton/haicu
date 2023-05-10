@@ -328,9 +328,9 @@ def convert_derived2rle(derived_file_name):
 
         # print("Time required for section " + str(section) + ":" + str(time_required * 10) + "ns (" + str(time_required * 10 / 1000000) + "ms)")
 
-        byte_count = 0
-        num_entries = len(rle)
-        byte_count = len(rle) * 4
+        # byte_count = 0
+        # num_entries = len(rle)
+        # byte_count = len(rle) * 4
 
         # print("Total entries: " + str(num_entries))
         # print(str(byte_count) + " bytes required (" + str(byte_count*8) + " bits)")
@@ -375,8 +375,8 @@ def convert_rle2raw(rle_file_name):
                         elif pos == 5:
                             final[section][9].append(value)
                         else:
-                            final[section][(pos*2)].append(value >> 8)
-                            final[section][(pos*2)+1].append(value & 0xFF)
+                            final[section][(pos*2)].append(value & 0xFF)
+                            final[section][(pos*2)+1].append(value >> 8)
                     except Exception as e:
                         print(e)
 
