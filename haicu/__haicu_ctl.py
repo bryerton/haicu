@@ -483,7 +483,7 @@ def arg_upload(args, ftdi_dev):
     try:
         if(in_ext.lower() == ".txt"):
             print("Generating RLE from " + args.file)
-            rle = haicu_format.convert_derived_absolute2rle(args.file)
+            rle = haicu_format.convert_derived2rle(args.file)
         elif(in_ext.lower() == ".rle"):
             rle = haicu_format.load_rle_from_file(args.file)
         else:
@@ -517,7 +517,7 @@ def arg_program(args, ftdi_dev):
         if(in_ext.lower() == ".txt"):
             if(args.verbose > 0):
                 print("Generating RLE from " + in_file)
-            rle = haicu_format.convert_derived_absolute2rle(in_file)
+            rle = haicu_format.convert_derived2rle(in_file)
         elif(in_ext.lower() == ".rle"):
             if(args.verbose > 0):
                 print("Loading RLE payload from " + in_file)
@@ -587,7 +587,7 @@ def arg_convert(args, ftdi_dev):
         print("Invalid extension, output file must be .rle")
         sys.exit(-1)
 
-    rle = haicu_format.convert_derived_absolute2rle(args.infile)
+    rle = haicu_format.convert_derived2rle(args.infile)
     if(args.verbose > 1):
         pprint.pprint(rle) # Debug print, only useful for tiny derived.txt files
 
