@@ -93,6 +93,17 @@ def handle_set(name, ftdi_dev, addr, mask, offset, data, json):
         else:
             rmr_register(ftdi_dev, addr, mask, offset, int(data, 0))
 
+def get_mld1200(args):
+    try:
+        ftdi_dev = haicu_ftdi.init(args.serial)
+    except:
+        print("Device '" + str(args.serial) + "' not found!")
+        print()
+        arg_list(args, None)
+        sys.exit(-1)
+
+    return ftdi_dev
+
 def main():
     prog='haicu_ctl'
     parser = argparse.ArgumentParser(prog=prog)
@@ -166,21 +177,13 @@ def main():
 
     args = parser.parse_args()
 
-    try:
-        ftdi_dev = haicu_ftdi.init(args.serial)
-    except:
-        print("Device '" + str(args.serial) + "' not found!")
-        print()
-        arg_list(args, None)
-        sys.exit(-1)
-
     if(args.command == None):
         parser.print_usage()
         sys.exit(0)
 
-    args.func(args, ftdi_dev)
+    args.func(args)
 
-def arg_list(args, ftdi_dev):
+def arg_list(args):
     print("Available devices:")
     result = haicu_ftdi.list_devices()
     for n, r in enumerate(result):
@@ -189,7 +192,10 @@ def arg_list(args, ftdi_dev):
     if(len(result) == 0):
         print("No devices found")
 
-def arg_memtest(args, ftdi_dev):
+def arg_memtest(args):
+
+    ftdi_dev = get_mld1200(args)
+
     # Generate random data of 'tlen' length
     tlen = 1048576 # number of 32-bit words to transfer
     tlen_in_bytes = tlen * 4
@@ -226,11 +232,14 @@ def arg_memtest(args, ftdi_dev):
     print("Verification Successful")
 
 
-def arg_stop(args, ftdi_dev):
+def arg_stop(args):
+    ftdi_dev = get_mld1200(args)
     haicu_ftdi.write_register(ftdi_dev, 0, 0)
 
 ## Converts status values into human read-able format
-def arg_info(args, ftdi_dev):
+def arg_info(args):
+    ftdi_dev = get_mld1200(args)
+
     status_resp = haicu_ftdi.gather_status_registers(ftdi_dev)
     control_resp = haicu_ftdi.gather_control_registers(ftdi_dev)
 
@@ -292,7 +301,9 @@ def arg_info(args, ftdi_dev):
         print("{\"status\":" + dumps(status_resp) + ",\"control\":" + dumps(control_resp) + "}")
 
 ## Converts register values into human read-able format
-def arg_set(args, ftdi_dev):
+def arg_set(args):
+    ftdi_dev = get_mld1200(args)
+
     addr = args.regname
     if(addr == GET_REG_TABLE["trigger_invert"]):
         handle_set("trigger_invert", ftdi_dev, 2, 0x40000000, 30, args.data, args.json)
@@ -383,7 +394,9 @@ def arg_set(args, ftdi_dev):
             rmr_register(ftdi_dev, 8, 0x0000F000, 12, value & 0x0F)
 
 ## Low level status register read
-def arg_status(args, ftdi_dev):
+def arg_status(args):
+    ftdi_dev = get_mld1200(args)
+
     addr = int(args.addr, 0)
     val = haicu_ftdi.read_status(ftdi_dev, addr)
     if(not args.json):
@@ -404,7 +417,9 @@ def arg_status(args, ftdi_dev):
 
 ## Read/Write a register
 # if no data is passed 'read' is assumed
-def arg_reg(args, ftdi_dev):
+def arg_reg(args):
+    ftdi_dev = get_mld1200(args)
+
     addr = int(args.addr, 0)
     if(not args.data == None):
         haicu_ftdi.write_register(ftdi_dev, addr, int(args.data, 0))
@@ -425,7 +440,9 @@ def arg_reg(args, ftdi_dev):
             else:
                 print("{\"address\": " + "{:d}".format(addr)  + ", \"value\": null}")
 
-def arg_mem(args, ftdi_dev):
+def arg_mem(args):
+    ftdi_dev = get_mld1200(args)
+
     addr = int(args.addr, 0)
     if(not args.data == None):
         haicu_ftdi.write_memory(ftdi_dev, addr, int(args.data, 0))
@@ -446,7 +463,9 @@ def arg_mem(args, ftdi_dev):
             else:
                 print("{\"address\": " + "{:d}".format(addr)  + ", \"value\": null}")
 
-def arg_block(args, ftdi_dev):
+def arg_block(args):
+    ftdi_dev = get_mld1200(args)
+
     addr = int(args.addr, 0)
     count = int(args.count, 0)
     response = haicu_ftdi.read_memory(ftdi_dev, addr, count)
@@ -473,7 +492,9 @@ def arg_block(args, ftdi_dev):
             print("{\"address\": " + "{:d}".format(addr)  + ", \"value\": null}")
 
 
-def arg_upload(args, ftdi_dev):
+def arg_upload(args):
+    ftdi_dev = get_mld1200(args)
+
     if(not os.path.exists(args.file)):
         print("File " + args.file + " does not exist")
         sys.exit(-1)
@@ -500,7 +521,7 @@ def arg_upload(args, ftdi_dev):
     upload(ftdi_dev, rle, args.section, args.verbose)
 
 
-def arg_program(args, ftdi_dev):
+def arg_program(args):
     if(not os.path.exists(args.config_file)):
         if(args.verbose > 0):
             print("Config file " + args.config_file + " not found")
@@ -573,7 +594,7 @@ def arg_program(args, ftdi_dev):
             print()
 
 
-def arg_convert(args, ftdi_dev):
+def arg_convert(args):
     if(args.verbose > 0):
         print("Converting " + args.infile + " to RLE")
 
@@ -598,7 +619,7 @@ def arg_convert(args, ftdi_dev):
         for n in range(len(rle)):
             f.write(rle[n])
 
-def arg_compare(args, ftdi_dev):
+def arg_compare(args):
     # Verification
     if(haicu_format.match(args.dfile, args.rfile)):
         if(args.verbose > 0):
