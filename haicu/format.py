@@ -477,6 +477,7 @@ def convert_derived2rle_updated(derived_file_name: str) -> list[list[bytearray]]
 def convert_rle_event_to_bitstream(tunebox_pos, rle_event):
         pos_and_time = ((tunebox_pos & 0x7) << 13) | (rle_event[1] & 0x1FFF)
 
+        # left and right addresses are treated differently
         if (tunebox_pos == 4) or (tunebox_pos == 5):
             value = rle_event[2] & 0xFFFF
         else:
@@ -499,17 +500,6 @@ def generate_bitstream_from_rle_set(rle):
 
     min_step = min(step)
 
-
-
-    for tunebox_pair in rle:
-            pos_and_time = ((pos[0] & 0x7) << 13) | (pos[1] & 0x1FFF)
-
-            if (pos[0] == 4) or (pos[0] == 5):
-                value = pos[2] & 0xFFFF
-            else:
-                value = (pos[3] & 0xFF) << 8 | (pos[2] & 0xFF)
-
-            bitstream.extend(struct.pack(">HH", pos_and_time, value))
 
     return bitstream
 
