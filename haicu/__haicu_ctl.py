@@ -16,6 +16,8 @@ from . import __version__ as __version__
 
 VERSION = __version__
 
+MLD1200_TIMEOUT_IN_SECONDS = 10
+
 # Table to convert 'get' request name to status register address
 GET_REG_TABLE = {
     'invert_frontpanel': 23,
@@ -95,11 +97,14 @@ def handle_set(name, ftdi_dev, addr, mask, offset, data, json):
 
 def get_mld1200(args):
     try:
-        ftdi_dev = haicu_ftdi.init(args.serial)
+        ftdi_dev = haicu_ftdi.init(args.serial, args.latency)
     except:
-        print("Device '" + str(args.serial) + "' not found!")
+        if args.serial == '':
+            print("Default MLD1200 not found")
+        else:
+            print("MLD1200 '" + str(args.serial) + "' not found")
         print()
-        arg_list(args, None)
+        arg_list(args)
         sys.exit(-1)
 
     return ftdi_dev
@@ -112,6 +117,7 @@ def main():
     parser.add_argument('-l', '--log', metavar='file', help='Log to output file')
     parser.add_argument('-s', '--serial', type=str, default='', help='MLD1200 serial of device to connect')
     parser.add_argument('-j', '--json', default=False, action='store_true', help='Send response as JSON object')
+    parser.add_argument('--latency', default=20, type=int, help="Latency of USB driver")
 
     cmd_parser = parser.add_subparsers(metavar='{list,info,set,upload,program,convert,compare}', dest="command", description="Valid subcommands", help=" ")
 
@@ -184,13 +190,13 @@ def main():
     args.func(args)
 
 def arg_list(args):
-    print("Available devices:")
+    print("Available MLD1200s:")
     result = haicu_ftdi.list_devices()
     for n, r in enumerate(result):
         print(str(n+1) + "\t" + str(r))
 
     if(len(result) == 0):
-        print("No devices found")
+        print("None")
 
 def arg_memtest(args):
 
@@ -562,14 +568,33 @@ def arg_program(args):
 
         if(config['DEFAULT'][section_name]):
             try:
-                dev = haicu_ftdi.init(config['DEFAULT'][section_name])
+                dev = haicu_ftdi.init(config['DEFAULT'][section_name], args.latency)
             except:
-                print("Error initializing MLD1200 device '" + config['DEFAULT'][section_name] + "'")
+                print("Exiting! MLD1200 '" + config['DEFAULT'][section_name] + "' not found for '" + section_name + "' section.")
+                sys.exit(-1)
 
             dev_list.append(dev)
+
+            if(args.verbose > 0):
+                print("Programming MLD1200 " + config['DEFAULT'][section_name] + " with '" + section_name + "' section")
+
             # Turn off program load prior to upload, as it will be blocked otherwise
+            if(args.verbose > 0):
+                print("Requesting run stop")
             haicu_ftdi.write_register(dev, 0, 0)
 
+            # Wait for the device
+            start_time = time.time()
+            is_active = haicu_ftdi.read_status(dev, 0) & 0x40000000
+
+            while is_active:
+                current_time = time.time()
+                if current_time - start_time > MLD1200_TIMEOUT_IN_SECONDS:
+                    print("Timeout waiting for " + config['DEFAULT'][section_name] + " to stop run")
+                    sys.exit(-1)
+                
+                is_active = haicu_ftdi.read_status(dev, 0) & 0x40000000
+                
             # Write config
             config_str = 'config.' + section_name
             if(config_str in config.keys()):
@@ -578,17 +603,19 @@ def arg_program(args):
                 haicu_ftdi.write_control_registers(dev, config[config_str])
 
             if(args.verbose > 0):
-                print("Programming " + config['DEFAULT'][section_name] + " with " + section_name + " section")
+                print("Uploading new programming")
             upload(dev, rle, GET_PROGRAM_TABLE[section_name], args.verbose)
 
             # Turn on program load
+            if(args.verbose > 0):
+                print("Starting run")
             val = haicu_ftdi.read_register(dev, 0)
             if(args.auto):
                 val = val | 0x40000000
             haicu_ftdi.write_register(dev, 0, 0x80000000 | val)
         else:
             if(args.verbose > 0):
-                print("No device specified for " + section_name + " section. Ignoring section in file")
+                print("Skipping '" + section_name + "' section in file, no MLD1200 specified.")
 
         if(args.verbose > 0):
             print()

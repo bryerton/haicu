@@ -29,7 +29,7 @@ def __read_clear(ftdi_dev: object) -> None:
             num_tries = num_tries + 1
 
 
-def init(dev_name: str) -> object:
+def init(dev_name: str, latency: int) -> object:
     """Initialize FTDI device and returns a handle to it
 
     Args:
@@ -47,7 +47,7 @@ def init(dev_name: str) -> object:
     ftdi_dev.set_bitmode(0, Ftdi.BitMode.SYNCFF)
     # Lowering the latency timer greatly speeds up the read requests,
     # But at lower values the USB is more prone to errors
-    # ftdi_dev.set_latency_timer(2)
+    ftdi_dev.set_latency_timer(latency)
 
     # Two calls (of any type) are necessary on startup
     # In theory, if we could know ahead of time if we've
