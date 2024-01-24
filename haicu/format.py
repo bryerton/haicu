@@ -374,7 +374,6 @@ def convert_derived2rle_updated(derived_file_name: str) -> list[list[bytearray]]
             pass
     num_mlds = int((num_lines) / 21)
 
-
     with open(derived_file_name, "r") as fp:
 
         # First line is discarded
@@ -396,7 +395,7 @@ def convert_derived2rle_updated(derived_file_name: str) -> list[list[bytearray]]
             for n in range(6):
                 # Each tunebox
                 rle.append([])
-                tunebox_pair.append([])
+                # tunebox_pair.append([])
 
 
             # Now we iterate thru using the 'time' in the first array position
@@ -428,34 +427,40 @@ def convert_derived2rle_updated(derived_file_name: str) -> list[list[bytearray]]
                             tunebox_pair[n][0] = tunebox_pair[n][0] + time_jump
 
                             if (tunebox_pair[n][0] > MAX_RUN_ALLOWED_RLE):
-                                rle[n].append(
-                                    MAX_RUN_ALLOWED_RLE-1, tunebox_pair[n][1], tunebox_pair[n][2])
+                                rle[n].append([
+                                    MAX_RUN_ALLOWED_RLE-1, tunebox_pair[n][1], tunebox_pair[n][2]])
 
                                 tunebox_pair[n][0] = tunebox_pair[n][0] - MAX_RUN_ALLOWED_RLE
                         else:
                             # Value changed, dump previous value to rle array
-                            rle[n].append(tunebox_pair[n][0] - 1 , tunebox_pair[n][1], tunebox_pair[n][2])
+                            rle[n].append([tunebox_pair[n][0] - 1 , tunebox_pair[n][1], tunebox_pair[n][2]])
 
                             # Update to new values
                             tunebox_pair[n][0] = time_jump
                             tunebox_pair[n][1] = pos_value
                             tunebox_pair[n][2] = pos_value2
 
-                # Check to make sure no position will starve out before this time jump is over
-                # Iterate thru so in a long jump we don't fill one FIFO before starting on the next
+                # Make sure each RLE doesn't extend too far
                 check_overrun = True
                 while (check_overrun):
                     check_overrun = False
                     for n in range(6):
-                        if (tunebox_pair[n][0] > MAX_RUN_ALLOWED_RLE):
-                            rle[n].append(MAX_RUN_ALLOWED_RLE-1, tunebox_pair[n][1], tunebox_pair[n][2])
-                            tunebox_pair[n][0] = tunebox_pair[n][0] - MAX_RUN_ALLOWED_RLE
-                            check_overrun = True
+                        try:
+                            if (tunebox_pair[n][0] > MAX_RUN_ALLOWED_RLE):
+                                rle[n].append([MAX_RUN_ALLOWED_RLE-1, tunebox_pair[n][1], tunebox_pair[n][2]])
+                                tunebox_pair[n][0] = tunebox_pair[n][0] - MAX_RUN_ALLOWED_RLE
+                                check_overrun = True
+                        except Exception as e:
+                            print(e)
+                            print(time_div)
+                            print(time_jump)
+                            print(tunebox_pair)
+                            exit(-1)
 
             # Write any outstanding final
             for n in range(6):
                 if (tunebox_pair[n][0] > 0):
-                    rle[n].append(tunebox_pair[n][0] - 1, tunebox_pair[n][1], tunebox_pair[n][2])
+                    rle[n].append([tunebox_pair[n][0] - 1, tunebox_pair[n][1], tunebox_pair[n][2]])
 
 
             # Take RLE arrays and create one bitstream
@@ -467,7 +472,7 @@ def convert_derived2rle_updated(derived_file_name: str) -> list[list[bytearray]]
                 rle_count = rle_count + len(rle[n])
 
             # Generate bitstream for each section
-            final[mld].extend(struct.pack(">I", len(rle_count)))
+            final[mld].extend(struct.pack(">I", rle_count))
             final[mld].extend(rle_bitstream)
 
 

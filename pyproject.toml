@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-haicu-ctl = "haicu.__haicu_ctl:main"
+haicu-ctl = "haicu.__main__:main"
 
 [tool.setuptools]
 packages = ["haicu"]
