@@ -2,20 +2,14 @@
 name = "haicu_eth"
 description = "package for HAICU experiment"
 dynamic = ["version"]
-
 authors = [
     { name = "Bryerton Shaw", email = "bryerton@triumf.ca" }
 ]
-
 maintainers = [
     { name = "Bryerton Shaw", email = "bryerton@triumf.ca" }
 ]
-
-readme.file = "README.md"
-readme.content-type = "text/markdown"
-
-license.file = "LICENSE"
-
+readme = {file = "README.md", content-type = "text/markdown"}
+license = {file = "LICENSE"}
 dependencies = [
     "simplejson",
     "pyftdi"
@@ -38,7 +32,6 @@ version = {attr = "haicu_eth.__version__"}
 [build-system]
 requires = [ "setuptools >= 35.0.2", "wheel >= 0.29.0"]
 build-backend = "setuptools.build_meta"
-
 
 [tool.tox]
 legacy_tox_ini = """
