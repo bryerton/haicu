@@ -1,5 +1,5 @@
 [project]
-name = "haicu"
+name = "haicu_eth"
 description = "package for HAICU experiment"
 dynamic = ["version"]
 
@@ -27,13 +27,13 @@ dev = [
 ]
 
 [project.scripts]
-haicu-ctl = "haicu.__main__:main"
+haicu_eth-ctl = "haicu_eth.__main__:main"
 
 [tool.setuptools]
-packages = ["haicu"]
+packages = ["haicu_eth"]
 
 [tool.setuptools.dynamic]
-version = {attr = "haicu.__version__"}
+version = {attr = "haicu_eth.__version__"}
 
 [build-system]
 requires = [ "setuptools >= 35.0.2", "wheel >= 0.29.0"]

@@ -10,9 +10,11 @@ import configparser
 import os
 import pprint
 from simplejson import dumps
-from . import ftdi as haicu_ftdi
+from . import zmq as haicu_zmq
 from . import format as haicu_format
 from . import __version__ as __version__
+import time
+import struct
 
 VERSION = __version__
 
@@ -47,9 +49,10 @@ GET_REG_TABLE = {
 }
 
 GET_PROGRAM_TABLE = {
-    'left': 0,
-    'right': 1,
-    'extension': 2
+    'r_outer': 0,
+    'l_outer': 1,
+    'r_inner': 2,
+    'l_inner': 3
 }
 
 # Thank you stack overflow user nonDucor
@@ -80,24 +83,24 @@ class GracefulExiter():
 
 flag = GracefulExiter()
 
-def rmr_register(ftdi_dev, addr, mask, offset, data):
-    init_value = (haicu_ftdi.read_register(ftdi_dev, addr) & ~mask)
+def rmr_register(mld_dev, addr, mask, offset, data):
+    init_value = (haicu_zmq.read_register(mld_dev, addr) & ~mask)
     new_value = (data << offset) & mask
-    haicu_ftdi.write_register(ftdi_dev, addr, new_value | init_value)
+    haicu_zmq.write_register(mld_dev, addr, new_value | init_value)
 
-def read_masked_register(ftdi_dev, addr, mask, offset):
-    return (haicu_ftdi.read_register(ftdi_dev, addr) & mask) >> offset
+def read_masked_register(mld_dev, addr, mask, offset):
+    return (haicu_zmq.read_register(mld_dev, addr) & mask) >> offset
 
-def handle_set(name, ftdi_dev, addr, mask, offset, data, json):
+def handle_set(name, mld_dev, addr, mask, offset, data, json):
         if(data == None):
-            result = read_masked_register(ftdi_dev, addr, mask, offset)
+            result = read_masked_register(mld_dev, addr, mask, offset)
             print("0x" + '{:02X}'.format(result)) if(not json) else  print("{\"" + name + "\": 0x" + '{:02X}'.format(result) + "}")
         else:
-            rmr_register(ftdi_dev, addr, mask, offset, int(data, 0))
+            rmr_register(mld_dev, addr, mask, offset, int(data, 0))
 
 def get_mld1200(args):
     try:
-        ftdi_dev = haicu_ftdi.init(args.serial, args.latency)
+        mld_dev = haicu_zmq.init(args.serial)
     except:
         if args.serial == '':
             print("Default MLD1200 not found")
@@ -107,17 +110,19 @@ def get_mld1200(args):
         arg_list(args)
         sys.exit(-1)
 
-    return ftdi_dev
+    return mld_dev
+
 
 def main():
-    prog='haicu_ctl'
+
+    prog='haicu_eth_ctl'
     parser = argparse.ArgumentParser(prog=prog)
     parser.add_argument('--version', action='version', version='%(prog)s ' + str(VERSION))
-    parser.add_argument('-v', '--verbose', action='count', default=0, help='Increase logging verbosity, can be repeated')
+    parser.add_argument('-v', '--verbose', action='count', default=0, help='Increase logging verbosity, can be REPeated')
     parser.add_argument('-l', '--log', metavar='file', help='Log to output file')
     parser.add_argument('-s', '--serial', type=str, default='', help='MLD1200 serial of device to connect')
     parser.add_argument('-j', '--json', default=False, action='store_true', help='Send response as JSON object')
-    parser.add_argument('--latency', default=20, type=int, help="Latency of USB driver")
+    parser.add_argument('--latency', default=20, type=int, help="Latency of USB driver [**NOW IGNORED**]")
 
     cmd_parser = parser.add_subparsers(metavar='{list,info,set,upload,program,convert,compare}', dest="command", description="Valid subcommands", help=" ")
 
@@ -191,7 +196,7 @@ def main():
 
 def arg_list(args):
     print("Available MLD1200s:")
-    result = haicu_ftdi.list_devices()
+    result = haicu_zmq.list_devices()
     for n, r in enumerate(result):
         print(str(n+1) + "\t" + str(r))
 
@@ -200,7 +205,7 @@ def arg_list(args):
 
 def arg_memtest(args):
 
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
     # Generate random data of 'tlen' length
     tlen = 1048576 # number of 32-bit words to transfer
@@ -212,14 +217,14 @@ def arg_memtest(args):
 
     # Write test
     start_time = time.time()
-    haicu_ftdi.write_memory(ftdi_dev, 0, test_data)
+    haicu_zmq.write_memory(mld_dev, 0, test_data)
     end_time = time.time()
     delta_time = end_time - start_time
     print("Write done. Elapsed time: " + f"{delta_time:.3f}" + " Rate: " + f"{(tlen_in_bytes / 1000000) / delta_time :.3f}" + " MBps (" + f"{(tlen_in_bytes / delta_time) * 8 / 1000000:.3f}" + " Mbps)")
 
     # Read test
     start_time = time.time()
-    result = haicu_ftdi.read_memory(ftdi_dev, 0, tlen)
+    result = haicu_zmq.read_memory(mld_dev, 0, tlen)
     end_time = time.time()
     delta_time = end_time - start_time
     print("Read done. Elapsed time: " + f"{delta_time:.3f}" + " Rate: " + f"{(tlen_in_bytes / 1000000) / delta_time:.3f}" + " MBps (" + f"{(tlen_in_bytes / delta_time) * 8 / 1000000:.3f}" + " Mbps)")
@@ -239,15 +244,15 @@ def arg_memtest(args):
 
 
 def arg_stop(args):
-    ftdi_dev = get_mld1200(args)
-    haicu_ftdi.write_register(ftdi_dev, 0, 0)
+    mld_dev = get_mld1200(args)
+    haicu_zmq.write_register(mld_dev, 0, 0)
 
 ## Converts status values into human read-able format
 def arg_info(args):
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
-    status_resp = haicu_ftdi.gather_status_registers(ftdi_dev)
-    control_resp = haicu_ftdi.gather_control_registers(ftdi_dev)
+    status_resp = haicu_zmq.gather_status_registers(mld_dev)
+    control_resp = haicu_zmq.gather_control_registers(mld_dev)
 
     if(not args.json):
         print("Status:")
@@ -308,103 +313,103 @@ def arg_info(args):
 
 ## Converts register values into human read-able format
 def arg_set(args):
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
     addr = args.regname
     if(addr == GET_REG_TABLE["trigger_invert"]):
-        handle_set("trigger_invert", ftdi_dev, 2, 0x40000000, 30, args.data, args.json)
+        handle_set("trigger_invert", mld_dev, 2, 0x40000000, 30, args.data, args.json)
 
     if(addr == GET_REG_TABLE["trigger_delay"]):
-        handle_set("trigger_delay", ftdi_dev, 2, 0x000000FF, 0, args.data, args.json)
+        handle_set("trigger_delay", mld_dev, 2, 0x000000FF, 0, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox1"]):
-        handle_set("enable_tunebox1", ftdi_dev, 3, 0x000000FF, 0, args.data, args.json)
+        handle_set("enable_tunebox1", mld_dev, 3, 0x000000FF, 0, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox2"]):
-        handle_set("enable_tunebox2", ftdi_dev, 3, 0x0000FF00, 8, args.data, args.json)
+        handle_set("enable_tunebox2", mld_dev, 3, 0x0000FF00, 8, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox3"]):
-        handle_set("enable_tunebox3", ftdi_dev, 3, 0x00FF0000, 16, args.data, args.json)
+        handle_set("enable_tunebox3", mld_dev, 3, 0x00FF0000, 16, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox4"]):
-        handle_set("enable_tunebox4", ftdi_dev, 3, 0xFF000000, 24, args.data, args.json)
+        handle_set("enable_tunebox4", mld_dev, 3, 0xFF000000, 24, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox5"]):
-        handle_set("enable_tunebox5", ftdi_dev, 4, 0x000000FF, 0, args.data, args.json)
+        handle_set("enable_tunebox5", mld_dev, 4, 0x000000FF, 0, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox6"]):
-        handle_set("enable_tunebox6", ftdi_dev, 4, 0x0000FF00, 8, args.data, args.json)
+        handle_set("enable_tunebox6", mld_dev, 4, 0x0000FF00, 8, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox7"]):
-        handle_set("enable_tunebox7", ftdi_dev, 4, 0x00FF0000, 16, args.data, args.json)
+        handle_set("enable_tunebox7", mld_dev, 4, 0x00FF0000, 16, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_tunebox8"]):
-        handle_set("enable_tunebox8", ftdi_dev, 4, 0xFF000000, 24, args.data, args.json)
+        handle_set("enable_tunebox8", mld_dev, 4, 0xFF000000, 24, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_left_address"]):
-        handle_set("enable_left_address", ftdi_dev, 5, 0x00000FFF, 0, args.data, args.json)
+        handle_set("enable_left_address", mld_dev, 5, 0x00000FFF, 0, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_right_address"]):
-        handle_set("enable_right_address", ftdi_dev, 5, 0x0FFF0000, 16, args.data, args.json)
+        handle_set("enable_right_address", mld_dev, 5, 0x0FFF0000, 16, args.data, args.json)
 
     if(addr == GET_REG_TABLE["enable_frontpanel"]):
         if(args.data == None):
-            top = read_masked_register(ftdi_dev, 5, 0xF0000000, 28)
-            btm = read_masked_register(ftdi_dev, 5, 0x0000F000, 12)
+            top = read_masked_register(mld_dev, 5, 0xF0000000, 28)
+            btm = read_masked_register(mld_dev, 5, 0x0000F000, 12)
             result = (top << 4) | btm
             print("0x" + '{:02X}'.format(result)) if(not args.json) else print("{\"enable_frontpanel\": 0x" + '{:02X}'.format(result) + "}")
         else:
             value = int(args.data, 0) & 0xFF
-            rmr_register(ftdi_dev, 5, 0xF0000000, 28, (value & 0xF0) >> 4)
-            rmr_register(ftdi_dev, 5, 0x0000F000, 12, value & 0x0F)
+            rmr_register(mld_dev, 5, 0xF0000000, 28, (value & 0xF0) >> 4)
+            rmr_register(mld_dev, 5, 0x0000F000, 12, value & 0x0F)
 
     if(addr == GET_REG_TABLE["invert_tunebox1"]):
-        handle_set("invert_tunebox1", ftdi_dev, 6, 0x000000FF, 0, args.data, args.json)
+        handle_set("invert_tunebox1", mld_dev, 6, 0x000000FF, 0, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_tunebox2"]):
-        handle_set("invert_tunebox2", ftdi_dev, 6, 0x0000FF00, 8, args.data, args.json)
+        handle_set("invert_tunebox2", mld_dev, 6, 0x0000FF00, 8, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_tunebox3"]):
-        handle_set("invert_tunebox3", ftdi_dev, 6, 0x00FF0000, 16, args.data, args.json)
+        handle_set("invert_tunebox3", mld_dev, 6, 0x00FF0000, 16, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_tunebox4"]):
-        handle_set("invert_tunebox4", ftdi_dev, 6, 0xFF000000, 24, args.data, args.json)
+        handle_set("invert_tunebox4", mld_dev, 6, 0xFF000000, 24, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_tunebox5"]):
-        handle_set("invert_tunebox5", ftdi_dev, 7, 0x000000FF, 0, args.data, args.json)
+        handle_set("invert_tunebox5", mld_dev, 7, 0x000000FF, 0, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_tunebox6"]):
-        handle_set("invert_tunebox6", ftdi_dev, 7, 0x0000FF00, 8, args.data, args.json)
+        handle_set("invert_tunebox6", mld_dev, 7, 0x0000FF00, 8, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_tunebox7"]):
-        handle_set("invert_tunebox7", ftdi_dev, 7, 0x00FF0000, 16, args.data, args.json)
+        handle_set("invert_tunebox7", mld_dev, 7, 0x00FF0000, 16, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_tunebox8"]):
-        handle_set("invert_tunebox8", ftdi_dev, 7, 0xFF000000, 24, args.data, args.json)
+        handle_set("invert_tunebox8", mld_dev, 7, 0xFF000000, 24, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_left_address"]):
-        handle_set("invert_left_address", ftdi_dev, 8, 0x00000FFF, 0, args.data, args.json)
+        handle_set("invert_left_address", mld_dev, 8, 0x00000FFF, 0, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_right_address"]):
-        handle_set("invert_right_address", ftdi_dev, 8, 0x0FFF0000, 16, args.data, args.json)
+        handle_set("invert_right_address", mld_dev, 8, 0x0FFF0000, 16, args.data, args.json)
 
     if(addr == GET_REG_TABLE["invert_frontpanel"]):
         if(args.data == None):
-            top = read_masked_register(ftdi_dev, 8, 0xF0000000, 28)
-            btm = read_masked_register(ftdi_dev, 8, 0x0000F000, 12)
+            top = read_masked_register(mld_dev, 8, 0xF0000000, 28)
+            btm = read_masked_register(mld_dev, 8, 0x0000F000, 12)
             result = (top << 4) | btm
             print("0x" + '{:02X}'.format(result)) if(not args.json) else print("{\"invert_frontpanel\": 0x" + '{:02X}'.format(result) + "}")
         else:
             value = int(args.data, 0) & 0xFF
-            rmr_register(ftdi_dev, 8, 0xF0000000, 28, (value & 0xF0) >> 4)
-            rmr_register(ftdi_dev, 8, 0x0000F000, 12, value & 0x0F)
+            rmr_register(mld_dev, 8, 0xF0000000, 28, (value & 0xF0) >> 4)
+            rmr_register(mld_dev, 8, 0x0000F000, 12, value & 0x0F)
 
 ## Low level status register read
 def arg_status(args):
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
     addr = int(args.addr, 0)
-    val = haicu_ftdi.read_status(ftdi_dev, addr)
+    val = haicu_zmq.read_status(mld_dev, addr)
     if(not args.json):
         if(val != None):
             if(args.verbose > 0):
@@ -424,13 +429,13 @@ def arg_status(args):
 ## Read/Write a register
 # if no data is passed 'read' is assumed
 def arg_reg(args):
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
     addr = int(args.addr, 0)
     if(not args.data == None):
-        haicu_ftdi.write_register(ftdi_dev, addr, int(args.data, 0))
+        haicu_zmq.write_register(mld_dev, addr, int(args.data, 0))
     else:
-        val = haicu_ftdi.read_register(ftdi_dev, addr)
+        val = haicu_zmq.read_register(mld_dev, addr)
         if(not args.json):
             if(val != None):
                 if(args.verbose > 0):
@@ -447,13 +452,13 @@ def arg_reg(args):
                 print("{\"address\": " + "{:d}".format(addr)  + ", \"value\": null}")
 
 def arg_mem(args):
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
     addr = int(args.addr, 0)
     if(not args.data == None):
-        haicu_ftdi.write_memory(ftdi_dev, addr, int(args.data, 0))
+        haicu_zmq.write_memory(mld_dev, addr, int(args.data, 0))
     else:
-        val = haicu_ftdi.read_memory(ftdi_dev, addr, 1)
+        val = haicu_zmq.read_memory(mld_dev, addr, 1)
         if(not args.json):
             if(len(val) > 0):
                 if(args.verbose > 0):
@@ -470,11 +475,11 @@ def arg_mem(args):
                 print("{\"address\": " + "{:d}".format(addr)  + ", \"value\": null}")
 
 def arg_block(args):
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
     addr = int(args.addr, 0)
     count = int(args.count, 0)
-    response = haicu_ftdi.read_memory(ftdi_dev, addr, count)
+    response = haicu_zmq.read_memory(mld_dev, addr, count)
     if(not args.json):
         if(len(response) > 0):
             for idx, val in enumerate(response):
@@ -499,7 +504,7 @@ def arg_block(args):
 
 
 def arg_upload(args):
-    ftdi_dev = get_mld1200(args)
+    mld_dev = get_mld1200(args)
 
     if(not os.path.exists(args.file)):
         print("File " + args.file + " does not exist")
@@ -510,7 +515,7 @@ def arg_upload(args):
     try:
         if(in_ext.lower() == ".txt"):
             print("Generating RLE from " + args.file)
-            rle = haicu_format.convert_derived2rle_updated(args.file)
+            rle = haicu_format.convert_derived2rle(args.file)
         elif(in_ext.lower() == ".rle"):
             rle = haicu_format.load_rle_from_file(args.file)
         else:
@@ -524,7 +529,8 @@ def arg_upload(args):
             print("File not found: " + args.file)
             sys.exit(-1)
 
-    upload(ftdi_dev, rle, args.section, args.verbose)
+    print("uploading loaded file\n")
+    upload(mld_dev, rle, args.section, args.verbose)
 
 
 def arg_program(args):
@@ -539,12 +545,15 @@ def arg_program(args):
     in_file = config['DEFAULT']['file']
     in_name, in_ext = os.path.splitext(in_file)
 
+    #print("config sections:", config.sections())
+    #print("Default section contents:", dict(config['DEFAULT']))
+
     # Load the RLE file
     try:
         if(in_ext.lower() == ".txt"):
             if(args.verbose > 0):
                 print("Generating RLE from " + in_file)
-            rle = haicu_format.convert_derived2rle_updated(in_file)
+            rle = haicu_format.convert_derived2rle(in_file)
         elif(in_ext.lower() == ".rle"):
             if(args.verbose > 0):
                 print("Loading RLE payload from " + in_file)
@@ -565,10 +574,14 @@ def arg_program(args):
     dev_list = []
     for n in range(len(rle)):
         section_name = next(key for key, value in GET_PROGRAM_TABLE.items() if value == n)
+        
 
         if(config['DEFAULT'][section_name]):
+            print("IP for", section_name + config['DEFAULT'][section_name])
             try:
-                dev = haicu_ftdi.init(config['DEFAULT'][section_name], args.latency)
+                print("attempting to init with IP")
+                dev = haicu_zmq.init(config['DEFAULT'][section_name])
+                print("init succsful")
             except:
                 print("Exiting! MLD1200 '" + config['DEFAULT'][section_name] + "' not found for '" + section_name + "' section.")
                 sys.exit(-1)
@@ -581,26 +594,27 @@ def arg_program(args):
             # Turn off program load prior to upload, as it will be blocked otherwise
             if(args.verbose > 0):
                 print("Requesting run stop")
-            haicu_ftdi.write_register(dev, 0, 0)
+            haicu_zmq.write_register(dev, 0, 0)
+            print("write_register complete ")
 
             # Wait for the device
             start_time = time.time()
-            is_active = haicu_ftdi.read_status(dev, 0) & 0x40000000
+            is_active = haicu_zmq.read_status(dev, 0) & 0x40000000
 
             while is_active:
                 current_time = time.time()
                 if current_time - start_time > MLD1200_TIMEOUT_IN_SECONDS:
                     print("Timeout waiting for " + config['DEFAULT'][section_name] + " to stop run")
                     sys.exit(-1)
-
-                is_active = haicu_ftdi.read_status(dev, 0) & 0x40000000
-
+                
+                is_active = haicu_zmq.read_status(dev, 0) & 0x40000000
+                
             # Write config
             config_str = 'config.' + section_name
             if(config_str in config.keys()):
                 if(args.verbose > 0):
                     print("Writing config for " + section_name + " section")
-                haicu_ftdi.write_control_registers(dev, config[config_str])
+                haicu_zmq.write_control_registers(dev, config[config_str])
 
             if(args.verbose > 0):
                 print("Uploading new programming")
@@ -609,10 +623,10 @@ def arg_program(args):
             # Turn on program load
             if(args.verbose > 0):
                 print("Starting run")
-            val = haicu_ftdi.read_register(dev, 0)
+            val = haicu_zmq.read_register(dev, 0)
             if(args.auto):
                 val = val | 0x40000000
-            haicu_ftdi.write_register(dev, 0, 0x80000000 | val)
+            haicu_zmq.write_register(dev, 0, 0x80000000 | val)
         else:
             if(args.verbose > 0):
                 print("Skipping '" + section_name + "' section in file, no MLD1200 specified.")
@@ -635,7 +649,7 @@ def arg_convert(args):
         print("Invalid extension, output file must be .rle")
         sys.exit(-1)
 
-    rle = haicu_format.convert_derived2rle_updated(args.infile)
+    rle = haicu_format.convert_derived2rle(args.infile)
     if(args.verbose > 1):
         pprint.pprint(rle) # Debug print, only useful for tiny derived.txt files
 
@@ -657,17 +671,17 @@ def arg_compare(args):
             print()
             sys.exit(-1)
 
-# def arg_csv(args, ftdi_dev):
+# def arg_csv(args, mld_dev):
 #     haicu_format.convert_sum_to_obj(args.csvfile)
 
-def upload(ftdi_dev, rle, mld_section, verbose):
+def upload(mld_dev, rle, mld_section, verbose):
     section_name = next(key for key, value in GET_PROGRAM_TABLE.items() if value == mld_section)
 
     if(mld_section >= len(rle)):
         print("MLD section '" + section_name + "' does not exist")
         sys.exit(-1)
 
-    reg = haicu_ftdi.read_register(ftdi_dev, 0)
+    reg = haicu_zmq.read_register(mld_dev, 0)
     if(reg != 0):
         print("Device is in program load mode, clear register 0 bit 1 to proceed")
         return
@@ -679,7 +693,7 @@ def upload(ftdi_dev, rle, mld_section, verbose):
     if(verbose > 0):
         start_time = time.time()
 
-    haicu_ftdi.write_memory(ftdi_dev, 0, payload)
+    haicu_zmq.write_memory(mld_dev, 0, payload)
     if(verbose > 0):
         end_time = time.time()
         delta_time = end_time - start_time
@@ -687,7 +701,10 @@ def upload(ftdi_dev, rle, mld_section, verbose):
 
     if(verbose > 0):
         start_time = time.time()
-    result = haicu_ftdi.read_memory(ftdi_dev, 0, tlen)
+
+    print("Reading back ...%d words\n" % tlen)
+    result = haicu_zmq.read_memory(mld_dev, 0, tlen)
+    print("Read    back ...%d words\n" % tlen)
 
     if(verbose > 0):
         end_time = time.time()
@@ -697,6 +714,9 @@ def upload(ftdi_dev, rle, mld_section, verbose):
     # Validate
     if(len(result) > 0):
         for n in range(0, len(payload)):
+        #for n in range(0, 10):
+            #print("result[%d] = %s"    % ( n, hex(result[n]  ) )   )
+            #print("payload[%d] = %s\n" % ( n, hex(payload[n] ) )   )
             if result[n] != payload[n]:
                 print("Verification Failed. Mismatch at " + str(n) + "\tExpected: " + str(payload[n]) + " Result: " + str(result[n]))
                 sys.exit(-1)
@@ -707,10 +727,7 @@ def upload(ftdi_dev, rle, mld_section, verbose):
             print("Payload length in bytes: " + str(tlen * 4))
             print("Updating program count register")
 
-        haicu_ftdi.write_register(ftdi_dev, 1, tlen) # Load program count
+        haicu_zmq.write_register(mld_dev, 1, tlen) # Load program count
     else:
         print("Verification failed. Null result payload")
 
-
-if __name__ == "__main__":
-    main()

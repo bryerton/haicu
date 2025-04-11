@@ -1,11 +1,11 @@
 .PHONY: docs clean upload build
 
 docs: ## Update python docs
-	@cd docs; sphinx-apidoc -f -o ./source ../haicu
+	@cd docs; sphinx-apidoc -f -o ./source ../haicu_eth
 	@cd docs; make html
 
 clean: ## Clean python cache files
-	@rm -rf rm -rf build/ dist/ haicu.egg-info/ haicu/__pycache__
+	@rm -rf rm -rf build/ dist/ haicu_eth.egg-info/ haicu_eth/__pycache__
 	@cd docs; make clean
 
 build:

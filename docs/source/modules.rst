@@ -1,7 +1,7 @@
-haicu
+haicu_eth
 =====
 
 .. toctree::
    :maxdepth: 4
 
-   haicu
+   haicu_eth
