@@ -1,4 +1,4 @@
-haicu package
+haicu_eth package
 =============
 
 Submodules
@@ -23,7 +23,7 @@ haicu.ftdi module
 Module contents
 ---------------
 
-.. automodule:: haicu
+.. automodule:: haicu_eth
    :members:
    :undoc-members:
    :show-inheritance:

@@ -143,7 +143,7 @@ def main():
     upload_parser.add_argument("section", action=RenameProgramChoice, choices=GET_PROGRAM_TABLE)
 
     program_parser = cmd_parser.add_parser("program", help="Program MLD1200s")
-    program_parser.add_argument("config_file", nargs="?", type=str, default="haicu.ini", help="INI file to use for programming")
+    program_parser.add_argument("config_file", nargs="?", type=str, default="haicu_eth.ini", help="INI file to use for programming")
     program_parser.add_argument("-a", "--auto", default=False, action='store_true', help="Auto-reload after sequence is finished")
     program_parser.set_defaults(func=arg_program)
 
@@ -194,13 +194,65 @@ def main():
 
     args.func(args)
 
-def arg_list(args):
-    print("Available MLD1200s:")
-    result = haicu_zmq.list_devices()
-    for n, r in enumerate(result):
-        print(str(n+1) + "\t" + str(r))
+#def arg_list(args):
+   # print("Available MLD1200s:")
+  #  result = haicu_zmq.list_devices()
+   # for n, r in enumerate(result):
+   #     print(str(n+1) + "\t" + str(r))
+#
+  #  if(len(result) == 0):
+  #      print("None")
 
-    if(len(result) == 0):
+def arg_list(args):
+    """List all available MLD1200 devices from the config file that are responsive."""
+    if not hasattr(args, 'config_file') or not os.path.exists(args.config_file):
+        print("Config file not found or not specified")
+        return
+    
+    # Read the config file
+    config = configparser.ConfigParser()
+    config.read(args.config_file)
+    
+    responsive_devices = []
+    
+    print("Checking MLD1200 devices from config file...")
+    
+    # Use just the keys from GET_PROGRAM_TABLE for section names
+    # GET_PROGRAM_TABLE = {'r_outer': 0, 'l_outer': 1, 'r_inner': 2, 'l_inner': 3}
+    for section_name in GET_PROGRAM_TABLE.keys():
+        # Check if this section has an IP address assigned in the config file
+        if section_name in config['DEFAULT'] and config['DEFAULT'][section_name]:
+            ip_address = config['DEFAULT'][section_name]
+            print(f"Checking {section_name} at {ip_address}...")
+            
+            try:
+                # Try to initialize the device
+                dev = haicu_zmq.init(ip_address)
+                
+                # Set a timeout to prevent hanging
+                import zmq
+                dev.socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 second timeout
+                
+                # Check if it's responsive by reading status register 0
+                val = haicu_zmq.read_status(dev, 0)
+                
+                if val is not None:
+                    print(f"✓ Device {section_name} at {ip_address} is responsive")
+                    responsive_devices.append((section_name, ip_address))
+                else:
+                    print(f"✗ Device {section_name} at {ip_address} did not respond properly")
+            
+            except Exception as e:
+                print(f"✗ Could not connect to {section_name} at {ip_address}: {str(e)}")
+        else:
+            print(f"Section {section_name} has no IP address assigned")
+    
+    # Print results
+    print("\nAvailable MLD1200s:")
+    if responsive_devices:
+        for n, (section_name, ip_address) in enumerate(responsive_devices):
+            print(f"{n+1}\t{section_name}: {ip_address}")
+    else:
         print("None")
 
 def arg_memtest(args):
