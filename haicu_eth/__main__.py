@@ -126,8 +126,9 @@ def main():
 
     cmd_parser = parser.add_subparsers(metavar='{list,info,set,upload,program,convert,compare}', dest="command", description="Valid subcommands", help=" ")
 
-    ftdi_list_parser = cmd_parser.add_parser("list", help="List available MLD1200 devices")
-    ftdi_list_parser.set_defaults(func=arg_list)
+    list_parser = cmd_parser.add_parser("list", help="List available MLD1200 devices")
+    list_parser.set_defaults(func=arg_list)
+    list_parser.add_argument("config_file", nargs="?", type=str, default="haicu_eth.ini", help="INI file to use for programming")
 
     get_parser = cmd_parser.add_parser("info", help="Get status information")
     get_parser.set_defaults(func=arg_info)
