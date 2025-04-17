@@ -231,20 +231,20 @@ def arg_list(args):
                 dev = haicu_zmq.init(ip_address)
                 
                 # Set a timeout to prevent hanging
-                import zmq
-                dev.socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 second timeout
+                
+                dev.socket.setsockopt(haicu_zmq.zmq.RCVTIMEO, 100)  # 0.1 second timeout
                 
                 # Check if it's responsive by reading status register 0
                 val = haicu_zmq.read_status(dev, 0)
                 
                 if val is not None:
-                    print(f"✓ Device {section_name} at {ip_address} is responsive")
+                    print(f"Device {ip_address} at {section_name} is responsive")
                     responsive_devices.append((section_name, ip_address))
                 else:
-                    print(f"✗ Device {section_name} at {ip_address} did not respond properly")
+                    print(f"Device {ip_address} at {section_name} did not respond")
             
             except Exception as e:
-                print(f"✗ Could not connect to {section_name} at {ip_address}: {str(e)}")
+                print(f"Could not connect to {ip_address} at {section_name} : {str(e)}")
         else:
             print(f"Section {section_name} has no IP address assigned")
     

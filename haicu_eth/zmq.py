@@ -120,7 +120,6 @@ def read_status(mld_dev: object, address: int) -> int:
         Value contained in status register at given address
 
     """
-    
     #__read_clear(mld_dev)
     payload = struct.pack("<I", (CMD_READ_STATUS << 24) | (address & 0xFF))
     print("haicu_read_register %d %d %d" % (address, 0, CMD_READ_STATUS) )
@@ -132,6 +131,7 @@ def read_status(mld_dev: object, address: int) -> int:
             #mld_dev.write_data(payload)
             #response = mld_dev.read_data(4)
             mld_dev.socket.send(payload)
+            
             message = mld_dev.socket.recv()
             print("Rcvd reply [ %s ]" % message)
 
@@ -142,6 +142,17 @@ def read_status(mld_dev: object, address: int) -> int:
             num_tries = num_tries + 1
         except:
             num_tries = num_tries + 1
+            #print("num_tries", num_tries)
+            
+    if num_tries >= MAX_NUM_TRIES:
+        try:
+            # Set LINGER to 0 before closing to prevent hanging
+            mld_dev.socket.setsockopt(zmq.LINGER, 0)
+            mld_dev.socket.close()
+            # Don't terminate the context as it might hang
+            print(f"Could not receive message from {mld_dev.name}: closed socket")
+        except:
+            print(f"Error closing socket for {mld_dev.name}")          
 
     return val
 
